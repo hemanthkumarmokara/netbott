@@ -5,6 +5,10 @@ import re
 import requests
 import urllib3
 from flask import Flask, request, jsonify, render_template, session
+import httpx
+# Add this import at the top
+from routing_checker import is_routing_possible
+
 
 app = Flask(__name__)
 app.secret_key = "your_secret_key_here"  # Required for session storage
@@ -16,9 +20,9 @@ os.environ["SSL_CERT_FILE"] = certifi.where()
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Azure OpenAI API Details
+AZURE_OPENAI_API_KEY = ""
 AZURE_OPENAI_ENDPOINT = ""
-AZURE_OPENAI_API_KEY = ""  # Replace with actual key
-AZURE_DEPLOYMENT_NAME = "gpt-4"
+AZURE_DEPLOYMENT_NAME = "gpt-4"  # Name of the deployment in Azure
 
 openai.api_type = "azure"
 openai.api_key = AZURE_OPENAI_API_KEY
@@ -61,7 +65,11 @@ def chat():
             return jsonify({"response": "You provided one IP. Please enter the destination IP."})
     else:
         source_ip, destination_ip = "N/A", "N/A"
-
+    # After determining source_ip and destination_ip
+    # routing_status = is_routing_possible(source_ip, destination_ip)
+    routing_status = "N/A"
+    if source_ip != "N/A" and destination_ip != "N/A":
+        routing_status = is_routing_possible(source_ip, destination_ip)
     # Define the prompt using prompt engineering with examples
     chat_prompt = [
         {
@@ -93,7 +101,8 @@ def chat():
         client = openai.AzureOpenAI(
                     api_key=AZURE_OPENAI_API_KEY,
                         api_version="2023-12-01-preview",
-                            azure_endpoint=AZURE_OPENAI_ENDPOINT
+                            azure_endpoint=AZURE_OPENAI_ENDPOINT,
+                             http_client=httpx.Client(verify=False)  
                             )
         response = client.chat.completions.create(
                     model=AZURE_DEPLOYMENT_NAME,  # Use `model` instead of `deployment_id`
@@ -103,6 +112,9 @@ def chat():
         bot_reply = response.choices[0].message.content
 
         #bot_reply = response["choices"][0]["message"]["content"]
+        if source_ip != "N/A" and destination_ip != "N/A":
+            routing_result = is_routing_possible(source_ip, destination_ip)
+            bot_reply += f"\n\n➡️ Routing Check Result: {routing_result}"
 
         return jsonify({
             "response": bot_reply,
@@ -112,5 +124,7 @@ def chat():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
 if __name__ == "__main__":
-    app.run(host = "0.0.0.0", port=5000, debug=True)
+    app.run(debug=True)
+
